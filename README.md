@@ -1,6 +1,6 @@
-# ♠ Xì Dách Online ♥
 
-Game Xì Dách nhiều người chơi trên trình duyệt, máy làm nhà cái. Kết nối trực tiếp giữa các người chơi (PeerJS / WebRTC), không cần server.
+
+Game  nhiều người chơi trên trình duyệt, máy làm nhà cái. Kết nối trực tiếp giữa các người chơi (PeerJS / WebRTC), không cần server.
 
 ## Cách chơi
 1. Mở trang game, nhập tên, bấm **Tạo phòng mới**.
