@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caro · Thư Giãn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+  :root{
+    --ink:#26388f; --ink2:#1a2870; --rose:#c9496f; --pink:#f4b9c3; --lav:#b8bde3;
+    --cream:#f6e6e0; --paper:#fffaf7;
+    --x:#26388f; --o:#c9496f;
+    --serif:"Cormorant Garamond","Times New Roman",serif;
+    --sans:"Be Vietnam Pro",system-ui,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{font-family:var(--sans);color:var(--ink);background:linear-gradient(180deg,#c9cbe9 0%,#a9aed6 55%,#9f98c8 100%) fixed;padding:12px 16px 32px}
+  button{font:inherit;font-size:14px;cursor:pointer;border:1px solid #26388f55;background:transparent;color:var(--ink);
+    padding:9px 16px;border-radius:999px;transition:background .2s,color .2s}
+  button:not(.cell):hover:not(:disabled){background:#26388f14}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--ink);color:var(--cream);border-color:var(--ink);font-weight:500}
+  button.primary:not(.cell):hover:not(:disabled){background:var(--ink2)}
+  input{font:inherit;font-size:15px;padding:10px 16px;border-radius:999px;border:1px solid #26388f40;background:var(--paper);color:var(--ink);outline:none}
+  input:focus{border-color:var(--ink)}
+  input::placeholder{color:#26388f80}
+  a{color:inherit}
+
+  .top{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:#f6e6e0ee;border-radius:999px;padding:8px 10px 8px 22px;box-shadow:0 10px 30px #0003}
+  @media(max-width:700px){.top{border-radius:18px;padding:10px 14px}}
+  .brand{font-family:var(--serif);font-size:26px;font-weight:500;letter-spacing:.06em}
+  .brand .st{color:var(--rose);font-size:.6em;vertical-align:middle;margin:0 .2em}
+  .sp{flex:1}
+  .back{text-decoration:none;font-size:14px;border:1px solid #26388f55;border-radius:999px;padding:7px 14px}
+  .back:hover{background:#26388f14}
+
+  .layout{max-width:1180px;margin:14px auto 0;display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px;align-items:start}
+  @media(max-width:880px){.layout{grid-template-columns:minmax(0,1fr)}}
+  .card{background:#f6e6e0f2;border-radius:18px;box-shadow:0 10px 30px #0003}
+  .stage{padding:16px}
+
+  /* Điểm số */
+  .score{display:flex;gap:10px;justify-content:center;align-items:stretch}
+  .pl{flex:1;max-width:280px;min-width:0;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;
+    border:1px solid #26388f22;background:var(--paper);transition:box-shadow .2s,background .2s}
+  .pl.turn.p1{box-shadow:0 0 0 2px var(--x)}
+  .pl.turn.p2{box-shadow:0 0 0 2px var(--o)}
+  .pl.won{background:#fbdde3}
+  .pi{min-width:0}
+  .pl .nm{font-family:var(--serif);font-size:20px;font-weight:600;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pl .nm i{font-weight:400;font-size:15px;opacity:.75}
+  .pl .sub{font-size:12px;color:#26388fa0;min-height:16px}
+  .pl .sc{font-family:var(--serif);font-size:34px;font-weight:500;margin-left:auto;line-height:1}
+  .vs{align-self:center;font-family:var(--serif);font-style:italic;font-size:18px;opacity:.7}
+  @media(max-width:520px){.pl{padding:8px 10px;gap:8px}.pl .nm{font-size:17px}.pl .sc{font-size:28px}}
+  #status{text-align:center;min-height:28px;margin:14px 0 12px;font-family:var(--serif);font-size:21px}
+
+  /* Bàn cờ */
+  #boardWrap{display:flex;justify-content:center;overflow:auto;padding-bottom:2px}
+  .board{--cs:32px;--th:max(2px,calc(var(--cs) * .1));display:grid;grid-template-columns:repeat(var(--n),var(--cs));gap:1px;
+    background:#26388f33;border:1px solid #26388f55;border-radius:6px;overflow:hidden;touch-action:manipulation;flex:none}
+  .board .cell{width:var(--cs);height:var(--cs);background:var(--paper);border:0;padding:0;border-radius:0;position:relative;
+    cursor:pointer;transition:background .15s}
+  .board.locked .cell{cursor:default}
+  .board .cell.last{background:#fbe8de}
+  .board .cell.win{background:var(--pink)}
+  .board .cell:focus-visible{outline:2px solid var(--ink);outline-offset:-2px;z-index:1}
+
+  /* Quân ✕ và ◯ (vẽ bằng CSS cho sắc nét ở mọi cỡ) */
+  .mx::before,.mx::after{content:"";position:absolute;left:50%;top:50%;width:64%;height:var(--th);background:var(--x);
+    border-radius:99px;transform:translate(-50%,-50%) rotate(45deg)}
+  .mx::after{transform:translate(-50%,-50%) rotate(-45deg)}
+  .mo::before{content:"";position:absolute;inset:19%;border:var(--th) solid var(--o);border-radius:50%}
+  .cell.last::before,.cell.last::after{animation:pop .22s ease-out}
+  @keyframes pop{from{scale:.3;opacity:0}to{scale:1;opacity:1}}
+  @media(hover:hover){
+    .board.g1 .cell.e:hover::before,.board.g1 .cell.e:hover::after{content:"";position:absolute;left:50%;top:50%;width:64%;
+      height:var(--th);background:var(--x);border-radius:99px;transform:translate(-50%,-50%) rotate(45deg);opacity:.22}
+    .board.g1 .cell.e:hover::after{transform:translate(-50%,-50%) rotate(-45deg)}
+    .board.g2 .cell.e:hover::before{content:"";position:absolute;inset:19%;border:var(--th) solid var(--o);border-radius:50%;opacity:.25}
+  }
+  .mk{--cs:28px;--th:3.5px;position:relative;display:inline-block;width:var(--cs);height:var(--cs);flex:none}
+  .mk.sm{--cs:20px;--th:2.5px;vertical-align:-4px;margin-left:4px}
+
+  .actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+
+  /* Cột cài đặt */
+  .side{padding:18px 18px 16px}
+  .side h3{font-family:var(--serif);font-weight:500;font-style:italic;font-size:24px;margin:0 0 4px}
+  .lab{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin:14px 0 6px;color:#26388fbb}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{padding:6px 13px;font-size:14px}
+  .chip.on{background:var(--ink);color:var(--cream);border-color:var(--ink)}
+  .note{font-size:12px;color:#26388fa0;margin-top:6px;line-height:1.4}
+  .row{display:flex;gap:8px}
+  .row input{flex:1;min-width:0}
+  .full{width:100%}
+  .stack{display:flex;flex-direction:column;gap:8px}
+  .or{text-align:center;font-family:var(--serif);font-style:italic;font-size:18px;margin:10px 0 8px;color:#26388f99}
+  #onMsg{min-height:18px;font-size:13px;color:var(--rose);margin-top:8px;text-align:center}
+  .room{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .code{font-family:var(--serif);font-size:26px;font-weight:600;letter-spacing:.16em}
+  details{margin-top:16px;font-size:13px;line-height:1.45}
+  summary{cursor:pointer;font-family:var(--serif);font-style:italic;font-size:18px}
+  details ul{padding-left:18px;margin:8px 0}
+  details li{margin:3px 0}
+
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--cream);color:var(--ink);
+    padding:11px 20px;border-radius:999px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9;
+    max-width:calc(100vw - 32px);text-align:center;box-shadow:0 10px 30px #0005;font-size:14px}
+  #toast.show{opacity:1}
+  .hidden{display:none!important}
+  @media(prefers-reduced-motion:reduce){.cell.last::before,.cell.last::after{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span class="brand">CARO<span class="st">✦</span></span>
+  <span class="sp"></span>
+  <a class="back" href="index.html">← Về Thư giãn</a>
+</div>
+
+<div class="layout">
+  <div class="card stage">
+    <div class="score" id="score"></div>
+    <div id="status" aria-live="polite"></div>
+    <div id="boardWrap"><div class="board" id="board"></div></div>
+    <div class="actions">
+      <button class="primary" id="btnNew">Ván mới</button>
+      <button id="btnUndo">Đi lại</button>
+      <button id="btnReset">Xóa điểm</button>
+    </div>
+  </div>
+
+  <div class="card side">
+    <h3>Cài đặt</h3>
+    <span class="lab">Chế độ</span>
+    <div class="chips" id="cMode"></div>
+
+    <span class="lab">Kích thước bàn</span>
+    <div class="chips" id="cSize"></div>
+
+    <span class="lab">Thắng khi xếp liền</span>
+    <div class="chips" id="cK"></div>
+
+    <div id="secAI">
+      <span class="lab">Độ khó</span>
+      <div class="chips" id="cLvl"></div>
+    </div>
+
+    <div id="secLocal">
+      <span class="lab">Tên người chơi</span>
+      <div class="stack">
+        <input id="p1" maxlength="16" placeholder="Người 1 (✕)">
+        <input id="p2" maxlength="16" placeholder="Người 2 (◯)">
+      </div>
+    </div>
+
+    <div id="secOnline">
+      <div id="onOff">
+        <label class="lab" for="onName">Tên của bạn</label>
+        <input id="onName" class="full" maxlength="16" placeholder="Nhập tên…">
+        <button class="primary full" id="btnHost" style="margin-top:12px">Tạo phòng mới</button>
+        <div class="or">hoặc</div>
+        <div class="row">
+          <input id="onCode" maxlength="5" placeholder="Mã phòng" style="text-transform:uppercase">
+          <button id="btnJoin">Vào phòng</button>
+        </div>
+        <div id="onMsg"></div>
+      </div>
+      <div id="onIn" class="hidden">
+        <span class="lab">Phòng của bạn</span>
+        <div class="room"><span class="code" id="codeOut"></span><button id="btnCopy">Copy mã</button></div>
+        <div class="note" id="roleOut"></div>
+        <button class="full" id="btnLeave" style="margin-top:12px">Rời phòng</button>
+      </div>
+    </div>
+
+    <details><summary>Luật chơi</summary><ul id="rules"></ul></details>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ================= CẤU HÌNH ================= */
+const SIZES=[3,5,10,15,20], LVLS=['Dễ','Vừa','Khó'];
+const MODES=[['ai','Với máy'],['local','2 người · cùng máy'],['online','Online']];
+const defK=n=>n<=3?3:n<=6?4:5;
+const DIRS=[[0,1],[1,0],[1,1],[1,-1]];
+const WIN=1e7, NEED_W=[WIN,6000,260,20,3,1,1,1];
+const RULES=[
+  'Hai bên lần lượt đánh ✕ và ◯ vào ô trống.',
+  'Ai xếp đủ số quân liên tiếp theo hàng ngang, dọc hoặc chéo trước sẽ thắng.',
+  'Mặc định: 3×3 cần 3 quân, 5×5 cần 4 quân, từ 10×10 trở lên cần 5 quân. Có thể tự chọn lại.',
+  'Bàn kín mà chưa ai thắng thì hòa. Người đi trước đổi bên sau mỗi ván.',
+  'Chơi với máy: bạn là ✕, máy là ◯. Có thể "Đi lại" để rút nước.',
+  'Online: tạo phòng rồi gửi mã 5 ký tự cho bạn. Hai người chơi trên hai máy khác nhau; chủ phòng là ✕ và chọn kích thước bàn.'
+];
+
+let cfg={mode:'ai',n:10,k:5,lvl:1,p1:'',p2:''};
+try{ Object.assign(cfg,JSON.parse(localStorage.getItem('caro_cfg')||'{}')); }catch(e){}
+if(!SIZES.includes(cfg.n)) cfg.n=10;
+if(!(cfg.k>=3&&cfg.k<=5&&cfg.k<=cfg.n)) cfg.k=defK(cfg.n);
+if(!MODES.some(m=>m[0]===cfg.mode)) cfg.mode='ai';
+if(![0,1,2].includes(cfg.lvl)) cfg.lvl=1;
+function saveCfg(){ try{ localStorage.setItem('caro_cfg',JSON.stringify(cfg)); }catch(e){} }
+
+let myName=''; try{ myName=localStorage.getItem('xd_name')||''; }catch(e){}
+const cleanName=s=>String(s||'').trim().slice(0,16);
+
+let G=null, score=[0,0,0], aiT=null, builtN=0;
+
+/* ================= LUẬT CHƠI ================= */
+function newGame(n,k,st){ G={n,k,b:new Array(n*n).fill(0),turn:st,starter:st,winner:0,line:[],last:-1,hist:[]}; }
+
+function winLine(b,n,k,i){
+  const p=b[i], r=i/n|0, c=i%n;
+  for(const [dr,dc] of DIRS){
+    const cells=[i];
+    for(const s of [1,-1]){
+      let rr=r+dr*s, cc=c+dc*s;
+      while(rr>=0&&rr<n&&cc>=0&&cc<n&&b[rr*n+cc]===p){ cells.push(rr*n+cc); rr+=dr*s; cc+=dc*s; }
+    }
+    if(cells.length>=k) return cells;
+  }
+  return null;
+}
+
+function play(i){
+  if(!G||G.winner||G.b[i]) return false;
+  const p=G.turn; G.b[i]=p; G.hist.push(i); G.last=i;
+  const line=winLine(G.b,G.n,G.k,i);
+  if(line){ G.winner=p; G.line=line; score[p]++; }
+  else if(G.hist.length===G.n*G.n) G.winner=3;
+  else G.turn=3-p;
+  return true;
+}
+function undoOne(){
+  const i=G.hist.pop(); if(i==null) return false;
+  if(G.winner===1||G.winner===2) score[G.winner]--;
+  G.winner=0; G.line=[]; G.turn=G.b[i]; G.b[i]=0;
+  G.last=G.hist.length?G.hist[G.hist.length-1]:-1;
+  return true;
+}
+const humanMoves=()=>G.starter===1?Math.ceil(G.hist.length/2):Math.floor(G.hist.length/2);
+function canUndo(){
+  if(!G||cfg.mode==='online') return false;
+  return cfg.mode==='ai'?humanMoves()>0:G.hist.length>0;
+}
+function undo(){
+  if(!canUndo()) return;
+  if(cfg.mode==='ai'){
+    clearTimeout(aiT); aiT=null;
+    undoOne(); while(G.turn!==1&&G.hist.length) undoOne();
+    maybeAI();
+  } else undoOne();
+  render();
+}
+
+/* ================= MÁY (AI) ================= */
+function candidates(b,n){
+  if(!b.some(v=>v)) return [(n>>1)*n+(n>>1)];
+  const R=n<=5?n:2, out=[];
+  for(let i=0;i<b.length;i++){
+    if(b[i]) continue;
+    const r=i/n|0, c=i%n; let near=false;
+    for(let dr=-R;dr<=R&&!near;dr++) for(let dc=-R;dc<=R;dc++){
+      const rr=r+dr, cc=c+dc;
+      if(rr>=0&&rr<n&&cc>=0&&cc<n&&b[rr*n+cc]){near=true;break;}
+    }
+    if(near) out.push(i);
+  }
+  return out;
+}
+/* Điểm của ô i nếu người p đánh vào: cộng mọi "cửa sổ" dài k đi qua ô, không có quân đối thủ.
+   Cửa sổ càng thiếu ít quân → càng giá trị. Tự nhiên xử lý được nước bị chặn và nước có khoảng trống. */
+function cellScore(b,n,k,i,p){
+  const r=i/n|0, c=i%n, o=3-p; let t=0;
+  for(const [dr,dc] of DIRS){
+    for(let s=-(k-1);s<=0;s++){
+      let cnt=0, ok=true;
+      for(let j=0;j<k;j++){
+        const rr=r+dr*(s+j), cc=c+dc*(s+j);
+        if(rr<0||rr>=n||cc<0||cc>=n){ok=false;break;}
+        const v=b[rr*n+cc];
+        if(v===o){ok=false;break;}
+        if(v===p) cnt++;
+      }
+      if(ok) t+=NEED_W[k-1-cnt];
+    }
+  }
+  return t;
+}
+/* Mức "Khó": nhìn trước 1 nước của đối thủ. Trả về mức nguy hiểm sau khi máy đánh m. */
+function replyRisk(b,n,k,m,me){
+  const op=3-me; b[m]=me;
+  let maxOpp=0, oppWin=false; const threats=[];
+  for(const c of candidates(b,n)){
+    const a=cellScore(b,n,k,c,op);
+    if(a>=WIN){oppWin=true;break;}
+    if(a>maxOpp) maxOpp=a;
+    if(cellScore(b,n,k,c,me)>=WIN) threats.push(c);
+  }
+  let risk;
+  if(oppWin) risk=WIN*5;
+  else if(threats.length>=2) risk=-WIN;                       // máy tạo được 2 đường thắng → chắc thắng
+  else if(threats.length===1) risk=cellScore(b,n,k,threats[0],op)*.5; // đối thủ buộc phải chặn
+  else risk=maxOpp;
+  b[m]=0; return risk;
+}
+function nega(b,n,k,p,d){
+  let best=-Infinity, any=false;
+  for(let i=0;i<b.length;i++) if(!b[i]){
+    any=true; b[i]=p;
+    const v=winLine(b,n,k,i)?10-d:-nega(b,n,k,3-p,d+1);
+    b[i]=0; if(v>best) best=v;
+  }
+  return any?best:0;
+}
+function perfectPick(b,n,k,me){
+  let best=-Infinity, arr=[];
+  for(let i=0;i<b.length;i++) if(!b[i]){
+    b[i]=me; const v=winLine(b,n,k,i)?10:-nega(b,n,k,3-me,1); b[i]=0;
+    if(v>best){best=v;arr=[i];} else if(v===best) arr.push(i);
+  }
+  return arr[Math.floor(Math.random()*arr.length)];
+}
+function aiPick(b,n,k,me,lvl){
+  b=b.slice();
+  if(n<=3&&lvl===2) return perfectPick(b,n,k,me);
+  const op=3-me, dW=lvl===0?.55:.85;
+  const sc=candidates(b,n).map(i=>{
+    const a=cellScore(b,n,k,i,me), d=cellScore(b,n,k,i,op);
+    return {i,a,d,s:(a>=WIN?WIN*10:a)+d*dW+Math.random()*.5};
+  }).sort((x,y)=>y.s-x.s);
+  if(sc[0].a>=WIN) return sc[0].i;
+  if(lvl===0){
+    if(sc[0].d>=WIN&&Math.random()<.7) return sc[0].i;
+    const top=sc.slice(0,Math.min(5,sc.length));
+    return top[Math.floor(Math.random()*top.length)].i;
+  }
+  if(lvl===1||sc[0].d>=WIN) return sc[0].i;
+  let best=sc[0].i, bv=-Infinity;
+  for(const c of sc.slice(0,10)){
+    const v=c.s-.9*replyRisk(b,n,k,c.i,me);
+    if(v>bv){bv=v;best=c.i;}
+  }
+  return best;
+}
+function maybeAI(){
+  if(cfg.mode!=='ai'||!G||G.winner||G.turn!==2||aiT) return;
+  const g=G;
+  aiT=setTimeout(()=>{
+    aiT=null;
+    if(G!==g||G.winner||G.turn!==2) return;
+    play(aiPick(G.b,G.n,G.k,2,cfg.lvl)); render();
+  },G.hist.length?320:450);
+}
+
+/* ================= ONLINE (MQTT, giống phòng Xì dách) ================= */
+const BROKERS=['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081'];
+const TOPIC='thugian-vn-9k2/caro1/';
+const NET={mq:null,role:'',code:'',id:'',peer:null,last:0,hb:null,busy:false,pending:false};
+let ON={names:['','',''],peer:false};
+
+const T=()=>TOPIC+NET.code;
+function makeCode(){const a='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=a[Math.floor(Math.random()*a.length)];return s;}
+const randId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const parseMsg=buf=>{ try{ const m=JSON.parse(buf.toString()); return m&&typeof m==='object'?m:null; }catch(e){ return null; } };
+function connectBroker(url){
+  return new Promise((res,rej)=>{
+    let c; try{ c=mqtt.connect(url,{connectTimeout:7000,reconnectPeriod:2000,keepalive:30,clean:true}); }catch(e){ rej(e); return; }
+    const t=setTimeout(()=>{ try{c.end(true);}catch(e){} rej(new Error('timeout')); },8000);
+    c.once('connect',()=>{ clearTimeout(t); res(c); });
+    c.on('error',()=>{});
+  });
+}
+function pub(topic,m){ if(NET.mq) NET.mq.publish(topic,JSON.stringify(m)); }
+function toGuest(m){ if(NET.peer) pub(T()+'/g/'+NET.peer,m); }
+function toHost(m){ pub(T()+'/h',Object.assign({from:NET.id},m)); }
+const peerIn=()=>NET.role==='host'?!!NET.peer:ON.peer;
+const mySide=()=>NET.role==='guest'?2:1;
+function onMsg(t){ $('#onMsg').textContent=t; }
+function readOnName(){
+  const n=cleanName($('#onName').value);
+  if(!n){ onMsg('Nhập tên trước đã'); return ''; }
+  myName=n; try{ localStorage.setItem('xd_name',n); }catch(e){}
+  return n;
+}
+function needLib(){ if(typeof mqtt==='undefined'){ onMsg('Không tải được thư viện kết nối. Kiểm tra internet rồi tải lại trang.'); return false; } return true; }
+
+async function hostRoom(){
+  if(NET.busy) return; const nm=readOnName(); if(!nm||!needLib()) return;
+  NET.busy=true; onMsg('Đang mở phòng…');
+  let c=null; for(const u of BROKERS){ try{ c=await connectBroker(u); break; }catch(e){} }
+  NET.busy=false;
+  if(!c){ onMsg('Không kết nối được máy chủ. Kiểm tra internet rồi thử lại.'); return; }
+  Object.assign(NET,{mq:c,role:'host',code:makeCode(),id:'h'+randId(),peer:null,last:0});
+  ON={names:['',nm,''],peer:false};
+  score=[0,0,0]; newGame(cfg.n,cfg.k,1);
+  c.subscribe(T()+'/h');
+  c.on('message',(topic,buf)=>{
+    const m=parseMsg(buf);
+    if(!m||typeof m.from!=='string'||NET.role!=='host') return;
+    hostMsg(m.from.slice(0,40),m);
+  });
+  NET.hb=setInterval(()=>{
+    if(!NET.peer) return;
+    toGuest({type:'ping'});
+    if(Date.now()-NET.last>25000) peerLeft('đã mất kết nối');
+  },5000);
+  onMsg(''); render();
+}
+function hostMsg(id,m){
+  if(m.type==='join'){
+    if(NET.peer&&NET.peer!==id){ pub(T()+'/g/'+id,{type:'full'}); return; }
+    const fresh=NET.peer!==id;
+    NET.peer=id; NET.last=Date.now(); ON.names[2]=cleanName(m.name)||'Khách';
+    if(fresh){ score=[0,0,0]; newGame(G.n,G.k,1); toast(`${ON.names[2]} đã vào phòng`); }
+    sync(); return;
+  }
+  if(id!==NET.peer) return;
+  NET.last=Date.now();
+  if(m.type==='leave') peerLeft('đã rời phòng');
+  else if(m.type==='move'){
+    if(typeof m.i==='number'&&G.turn===2&&m.i>=0&&m.i<G.b.length&&play(m.i|0)) sync();
+    else sync();
+  }
+  else if(m.type==='again'){ if(G.winner) nextGame(); }
+}
+function peerLeft(why){
+  toast(`${ON.names[2]||'Khách'} ${why}`);
+  NET.peer=null; ON.names[2]='';
+  render();
+}
+function sync(){
+  if(NET.role==='host') toGuest({type:'state',s:{n:G.n,k:G.k,b:G.b,turn:G.turn,starter:G.starter,winner:G.winner,
+    line:G.line,last:G.last,moves:G.hist.length,names:ON.names,score}});
+  render();
+}
+
+async function joinRoom(){
+  if(NET.busy) return; const nm=readOnName(); if(!nm||!needLib()) return;
+  const code=$('#onCode').value.trim().toUpperCase();
+  if(code.length!==5){ onMsg('Mã phòng gồm 5 ký tự'); return; }
+  NET.busy=true;
+  const id='g'+randId(); let joined=false, reached=false, full=false;
+  for(const u of BROKERS){
+    onMsg('Đang tìm phòng '+code+'…');
+    let c; try{ c=await connectBroker(u); reached=true; }catch(e){ continue; }
+    c.on('message',(topic,buf)=>{
+      const m=parseMsg(buf); if(!m) return;
+      if(m.type==='full'){ full=true; return; }
+      if(joined&&NET.mq!==c) return;
+      NET.last=Date.now();
+      if(m.type==='state'&&m.s){
+        if(!joined){ joined=true; Object.assign(NET,{mq:c,role:'guest',id,code}); }
+        guestState(m.s);
+      } else if(m.type==='closed'){ toast('Chủ phòng đã đóng phòng'); leaveRoom(); }
+    });
+    c.subscribe(TOPIC+code+'/g/'+id,()=>c.publish(TOPIC+code+'/h',JSON.stringify({type:'join',from:id,name:nm})));
+    for(let t=0;t<30&&!joined&&!full;t++) await sleep(200);
+    if(joined) break;
+    try{ c.end(true); }catch(e){}
+    if(full) break;
+  }
+  NET.busy=false;
+  if(!joined){
+    onMsg(full?'Phòng '+code+' đã đủ 2 người.'
+      :reached?'Không tìm thấy phòng '+code+'. Kiểm tra lại mã, và chủ phòng phải đang mở trang.'
+      :'Không kết nối được máy chủ. Kiểm tra internet rồi thử lại.');
+    return;
+  }
+  onMsg('');
+  NET.hb=setInterval(()=>{
+    toHost({type:'ping'});
+    if(Date.now()-NET.last>25000){ toast('Mất kết nối với chủ phòng'); leaveRoom(); }
+  },5000);
+}
+function guestState(s){
+  const n=s.n|0;
+  if(!SIZES.includes(n)||!Array.isArray(s.b)||s.b.length!==n*n) return;
+  G={n,k:s.k|0,b:s.b.map(v=>v|0),turn:s.turn|0,starter:s.starter|0,winner:s.winner|0,
+     line:Array.isArray(s.line)?s.line.map(v=>v|0):[],last:s.last|0,hist:new Array(Math.max(0,s.moves|0)).fill(-1)};
+  if(Array.isArray(s.names)) ON.names=['',cleanName(s.names[1]),cleanName(s.names[2])];
+  if(Array.isArray(s.score)) score=[0,s.score[1]|0,s.score[2]|0];
+  ON.peer=true; NET.pending=false;
+  render();
+}
+function leaveRoom(){
+  try{
+    if(NET.mq){ if(NET.role==='guest') toHost({type:'leave'}); else toGuest({type:'closed'}); }
+  }catch(e){}
+  clearInterval(NET.hb);
+  const c=NET.mq; setTimeout(()=>{ try{ c&&c.end(true); }catch(e){} },300);
+  Object.assign(NET,{mq:null,role:'',code:'',peer:null,hb:null,pending:false});
+  ON={names:['','',''],peer:false};
+  score=[0,0,0]; newGame(cfg.n,cfg.k,1); render();
+}
+
+/* ================= ĐIỀU KHIỂN ================= */
+function names(){
+  if(cfg.mode==='ai') return ['',myName||'Bạn','Máy'];
+  if(cfg.mode==='local') return ['',cfg.p1||'Người 1',cfg.p2||'Người 2'];
+  return ['',ON.names[1]||'Chủ phòng',ON.names[2]||'Đang chờ…'];
+}
+function canClick(){
+  if(!G||G.winner) return false;
+  if(cfg.mode==='ai') return G.turn===1&&!aiT;
+  if(cfg.mode==='local') return true;
+  return !!NET.mq&&peerIn()&&G.turn===mySide()&&!NET.pending;
+}
+function nextGame(){
+  clearTimeout(aiT); aiT=null;
+  const st=G&&G.hist.length?3-G.starter:(G?G.starter:1);
+  newGame(G?G.n:cfg.n,G?G.k:cfg.k,st);
+  if(NET.role==='host') sync(); else { maybeAI(); render(); }
+}
+function applySetup(){
+  clearTimeout(aiT); aiT=null;
+  score=[0,0,0]; newGame(cfg.n,cfg.k,1); saveCfg();
+  if(NET.role==='host') sync(); else { maybeAI(); render(); }
+}
+
+/* ================= GIAO DIỆN ================= */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let toastT;
+function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2600); }
+const mk=(p,sm)=>`<span class="mk${sm?' sm':''} ${p===1?'mx':'mo'}"></span>`;
+
+function fit(){
+  if(!G) return;
+  const n=G.n, w=$('#boardWrap').clientWidth;
+  const h=Math.max(300,innerHeight-260);
+  let cs=Math.floor((Math.min(w,h)-n-1)/n);
+  cs=Math.max(15,Math.min(cs,n<=3?110:n<=5?80:56));
+  $('#board').style.setProperty('--cs',cs+'px');
+}
+function buildBoard(){
+  if(builtN===G.n) return;
+  const n=builtN=G.n, bd=$('#board');
+  bd.style.setProperty('--n',n);
+  let h='';
+  for(let i=0;i<n*n;i++) h+=`<button class="cell" data-i="${i}" aria-label="Hàng ${(i/n|0)+1}, cột ${i%n+1}"></button>`;
+  bd.innerHTML=h; fit();
+}
+function renderBoard(){
+  const bd=$('#board'), cells=bd.children, win=new Set(G.line), click=canClick();
+  for(let i=0;i<cells.length;i++){
+    const v=G.b[i];
+    const cl='cell'+(v===1?' mx':v===2?' mo':' e')+(i===G.last&&v?' last':'')+(win.has(i)?' win':'');
+    if(cells[i].className!==cl) cells[i].className=cl;
+  }
+  bd.classList.toggle('locked',!click);
+  bd.classList.toggle('g1',click&&G.turn===1);
+  bd.classList.toggle('g2',click&&G.turn===2);
+}
+function renderScore(){
+  const N=names(), on=cfg.mode==='online';
+  const turnP=G.winner?0:G.turn;
+  $('#score').innerHTML=[1,2].map(p=>{
+    const me=on&&NET.mq&&p===mySide()?' <i>(bạn)</i>':'';
+    const sub=G.starter===p?'Đi trước ván này':'';
+    return `<div class="pl p${p}${turnP===p?' turn':''}${G.winner===p?' won':''}">${mk(p)}
+      <div class="pi"><div class="nm">${esc(N[p])}${me}</div><div class="sub">${sub}</div></div>
+      <div class="sc">${score[p]}</div></div>`;
+  }).join('<div class="vs">vs</div>');
+}
+function statusText(){
+  const N=names();
+  if(cfg.mode==='online'){
+    if(!NET.mq) return 'Tạo phòng hoặc nhập mã để chơi với bạn bè';
+    if(!peerIn()) return `Đang chờ người thứ 2 vào phòng <b>${esc(NET.code)}</b>…`;
+  }
+  if(G.winner===3) return 'Hòa! Bàn cờ đã kín.';
+  if(G.winner){
+    if(cfg.mode==='ai') return G.winner===1?'Bạn thắng rồi! 🎉':`Máy thắng ván này ${mk(2,1)}`;
+    if(cfg.mode==='online') return G.winner===mySide()?'Bạn thắng rồi! 🎉':`<b>${esc(N[G.winner])}</b> thắng ván này ${mk(G.winner,1)}`;
+    return `<b>${esc(N[G.winner])}</b> thắng! 🎉 ${mk(G.winner,1)}`;
+  }
+  if(cfg.mode==='ai') return G.turn===1?`Lượt của bạn ${mk(1,1)}`:`Máy đang nghĩ… ${mk(2,1)}`;
+  if(cfg.mode==='online') return G.turn===mySide()?`Lượt của bạn ${mk(G.turn,1)}`:`Chờ <b>${esc(N[G.turn])}</b> đi… ${mk(G.turn,1)}`;
+  return `Lượt của <b>${esc(N[G.turn])}</b> ${mk(G.turn,1)}`;
+}
+function chipRow(sel,items,cur,dis){
+  $(sel).innerHTML=items.map(([v,l])=>`<button class="chip${String(v)===String(cur)?' on':''}" data-v="${v}"${dis?' disabled':''}>${l}</button>`).join('');
+}
+function renderSide(){
+  const on=cfg.mode==='online', guest=NET.role==='guest';
+  chipRow('#cMode',MODES,cfg.mode,!!NET.mq);
+  chipRow('#cSize',SIZES.map(n=>[n,n+'×'+n]),G.n,guest);
+  chipRow('#cK',[3,4,5].filter(x=>x<=G.n).map(x=>[x,x+' quân']),G.k,guest);
+  chipRow('#cLvl',LVLS.map((l,i)=>[i,l]),cfg.lvl,false);
+  $('#secAI').classList.toggle('hidden',cfg.mode!=='ai');
+  $('#secLocal').classList.toggle('hidden',cfg.mode!=='local');
+  $('#secOnline').classList.toggle('hidden',!on);
+  $('#onOff').classList.toggle('hidden',!!NET.mq);
+  $('#onIn').classList.toggle('hidden',!NET.mq);
+  if(NET.mq){
+    $('#codeOut').textContent=NET.code;
+    $('#roleOut').innerHTML=NET.role==='host'
+      ?'Bạn là chủ phòng (✕). Gửi mã này cho bạn để cùng chơi. Bạn chọn kích thước bàn.'
+      :'Bạn là khách (◯). Chủ phòng chọn kích thước bàn.';
+  }
+  const btnNew=$('#btnNew');
+  btnNew.disabled=on&&(!NET.mq||(guest&&!G.winner));
+  $('#btnUndo').classList.toggle('hidden',on);
+  $('#btnUndo').disabled=!canUndo();
+  $('#btnReset').disabled=on&&guest;
+}
+function render(){
+  if(!G) return;
+  buildBoard(); renderBoard(); renderScore();
+  $('#status').innerHTML=statusText();
+  renderSide();
+}
+
+function initUI(){
+  $('#rules').innerHTML=RULES.map(r=>`<li>${r}</li>`).join('');
+  $('#p1').value=cfg.p1; $('#p2').value=cfg.p2; $('#onName').value=myName;
+  newGame(cfg.n,cfg.k,1);
+
+  $('#board').addEventListener('click',e=>{
+    const c=e.target.closest('.cell'); if(!c||!canClick()) return;
+    const i=+c.dataset.i; if(G.b[i]) return;
+    if(cfg.mode==='online'){
+      if(NET.role==='host'){ play(i); sync(); }
+      else{
+        NET.pending=true; toHost({type:'move',i}); render();
+        setTimeout(()=>{ if(NET.pending){ NET.pending=false; render(); } },4000);
+      }
+      return;
+    }
+    play(i); maybeAI(); render();
+  });
+  $('#cMode').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b||NET.mq||b.dataset.v===cfg.mode) return;
+    cfg.mode=b.dataset.v; applySetup();
+  });
+  $('#cSize').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b||NET.role==='guest') return;
+    cfg.n=+b.dataset.v; cfg.k=defK(cfg.n); applySetup();
+  });
+  $('#cK').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b||NET.role==='guest') return;
+    cfg.n=G.n; cfg.k=+b.dataset.v; applySetup();
+  });
+  $('#cLvl').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    cfg.lvl=+b.dataset.v; saveCfg(); render();
+  });
+  for(const id of ['p1','p2']) $('#'+id).addEventListener('input',e=>{ cfg[id]=cleanName(e.target.value); saveCfg(); render(); });
+
+  $('#btnNew').onclick=()=>{
+    if(NET.role==='guest'){ if(G.winner) toHost({type:'again'}); return; }
+    nextGame();
+  };
+  $('#btnUndo').onclick=undo;
+  $('#btnReset').onclick=()=>{ score=[0,0,0]; if(NET.role==='host') sync(); else render(); toast('Đã xóa điểm'); };
+  $('#btnHost').onclick=hostRoom;
+  $('#btnJoin').onclick=joinRoom;
+  $('#onCode').addEventListener('keydown',e=>{ if(e.key==='Enter') joinRoom(); });
+  $('#btnLeave').onclick=leaveRoom;
+  $('#btnCopy').onclick=()=>{
+    const c=NET.code;
+    try{ navigator.clipboard.writeText(c).then(()=>toast('Đã copy mã '+c),()=>toast('Mã phòng: '+c)); }catch(e){ toast('Mã phòng: '+c); }
+  };
+  window.addEventListener('resize',fit);
+  window.addEventListener('pagehide',()=>{
+    try{ if(NET.mq){ if(NET.role==='guest') toHost({type:'leave'}); else toGuest({type:'closed'}); } }catch(e){}
+  });
+  maybeAI(); render();
+}
+document.addEventListener('DOMContentLoaded',initUI);
+</script>
+</body>
+</html>
